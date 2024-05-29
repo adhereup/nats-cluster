@@ -28,7 +28,7 @@ services:
     restart: unless-stopped
 
   nats-1:
-    image: nats:${NATS_VERSION}
+    image: nats:2.10.16-alpine
     ports:
       - "4222:4222"
       - "7222:7222"
@@ -60,7 +60,7 @@ services:
     depends_on: ["swag"]
 
   nats-2:
-    image: nats:${NATS_VERSION}
+    image: nats:2.10.16-alpine
     ports:
       - "4223:4222"
       - "7223:7222"
@@ -92,7 +92,7 @@ services:
     depends_on: ["nats-1", "swag"]
 
   nats-3:
-    image: nats:${NATS_VERSION}
+    image: nats:2.10.16-alpine
     ports:
       - "4224:4222"
       - "7224:7222"
