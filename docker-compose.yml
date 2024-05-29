@@ -1,0 +1,131 @@
+version: "3.5"
+
+services:
+  swag:
+    image: lscr.io/linuxserver/swag:latest
+    container_name: swag
+    cap_add:
+      - NET_ADMIN
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=Etc/UTC
+      - URL=nats.adhereup.com
+      - VALIDATION=http
+      - SUBDOMAINS=www, #optional
+      - CERTPROVIDER= #optional
+      - DNSPLUGIN=cloudflare #optional
+      - PROPAGATION= #optional
+      - EMAIL=${EMAIL}
+      - ONLY_SUBDOMAINS=false #optional
+      - EXTRA_DOMAINS= #optional
+      - STAGING=false #optional
+    volumes:
+      - swag_config:/config/etc
+    ports:
+      - 443:443
+      - 80:80 #optional
+    restart: unless-stopped
+
+  nats-1:
+    image: nats:${NATS_VERSION}
+    ports:
+      - "4222:4222"
+      - "7222:7222"
+      - "7422:7422"
+      - "1882:1883"
+      - "8222:8222"
+    volumes:
+      - "./nats.conf:/etc/nats/nats-server.conf"
+      - "./jetstream/nats-1:/nats/storage"
+      - "./jwt/nats-1:/nats/jwt"
+      - "swag_config:/etc/nats/swag"
+    environment:
+      TZ: "Europe/Zurich"
+      SERVER_NAME: "adhereup-broker-eu1"
+      CLIENT_ADVERTISE: "${DOMAIN}:4222"
+      GATEWAY_ADVERTISE: "${DOMAIN}:7222"
+      LEAFNODES_ADVERTISE: "${DOMAIN}:7422"
+      CLUSTER_USERNAME: "adhereup-cluster"
+      CLUSTER_PASSWORD: ${CLUSTER_PASSWORD}
+      NATS_SYSTEM_ACCOUNT: ${NATS_SYSTEM_ACCOUNT}
+      NATS_OPERATOR: ${NATS_OPERATOR}
+      NATS_PRELOAD_KEY: ${NATS_PRELOAD_KEY}
+      NATS_PRELOAD_JWT: ${NATS_PRELOAD_JWT}
+      CERT_FILE: "/etc/nats/swag/letsencrypt/live/${DOMAIN}/fullchain.pem"
+      KEY_FILE: "/etc/nats/swag/letsencrypt/live/${DOMAIN}/privkey.pem"
+      ROUTES: "nats://${DOMAIN}:${CLUSTER_PASSWORD}@nats-2:6222\nnats://${DOMAIN}:${CLUSTER_PASSWORD}@nats-3:6222"
+    command: "-c /etc/nats/nats-server.conf --http_port 8222"
+    networks: ["nats"]
+    depends_on: ["swag"]
+
+  nats-2:
+    image: nats:${NATS_VERSION}
+    ports:
+      - "4223:4222"
+      - "7223:7222"
+      - "7423:7422"
+      - "1883:1883"
+    volumes:
+      - "./nats.conf:/etc/nats/nats-server.conf"
+      - "swag_config:/etc/nats/swag"
+      - "./jetstream/nats-2:/nats/storage"
+      - "./jwt/nats-2:/nats/jwt"
+    environment:
+      TZ: "Europe/Zurich"
+      SERVER_NAME: "adhereup-broker-eu2"
+      CLIENT_ADVERTISE: "${DOMAIN}:4223"
+      GATEWAY_ADVERTISE: "${DOMAIN}:7223"
+      LEAFNODES_ADVERTISE: "${DOMAIN}:7423"
+      CLUSTER_USERNAME: "adhereup-cluster"
+      CLUSTER_PASSWORD: ${CLUSTER_PASSWORD}
+      ADMIN_USER_PASS: ${ADMIN_USER_PASS}
+      NATS_SYSTEM_ACCOUNT: ${NATS_SYSTEM_ACCOUNT}
+      NATS_OPERATOR: ${NATS_OPERATOR}
+      NATS_PRELOAD_KEY: ${NATS_PRELOAD_KEY}
+      NATS_PRELOAD_JWT: ${NATS_PRELOAD_JWT}
+      CERT_FILE: "/etc/nats/swag/letsencrypt/live/${DOMAIN}/fullchain.pem"
+      KEY_FILE: "/etc/nats/swag/letsencrypt/live/${DOMAIN}/privkey.pem"
+      ROUTES: "nats://${DOMAIN}:${CLUSTER_PASSWORD}@nats-1:6222\nnats://${DOMAIN}:${CLUSTER_PASSWORD}@nats-3:6222"
+    command: "-c /etc/nats/nats-server.conf"
+    networks: ["nats"]
+    depends_on: ["nats-1", "swag"]
+
+  nats-3:
+    image: nats:${NATS_VERSION}
+    ports:
+      - "4224:4222"
+      - "7224:7222"
+      - "7424:7422"
+      - "1884:1883"
+    volumes:
+      - "./nats.conf:/etc/nats/nats-server.conf"
+      - "swag_config:/etc/nats/swag"
+      - "./jetstream/nats-3:/nats/storage"
+      - "./jwt/nats-3:/nats/jwt"
+    environment:
+      TZ: "Europe/Zurich"
+      SERVER_NAME: "adhereup-broker-eu3"
+      CLIENT_ADVERTISE: "${DOMAIN}:4224"
+      GATEWAY_ADVERTISE: "${DOMAIN}:7224"
+      LEAFNODES_ADVERTISE: "${DOMAIN}:7424"
+      CLUSTER_USERNAME: "adhereup-cluster"
+      CLUSTER_PASSWORD: ${CLUSTER_PASSWORD}
+      ADMIN_USER_PASS: ${ADMIN_USER_PASS}
+      NATS_SYSTEM_ACCOUNT: ${NATS_SYSTEM_ACCOUNT}
+      NATS_OPERATOR: ${NATS_OPERATOR}
+      NATS_PRELOAD_KEY: ${NATS_PRELOAD_KEY}
+      NATS_PRELOAD_JWT: ${NATS_PRELOAD_JWT}
+      CERT_FILE: "/etc/nats/swag/letsencrypt/live/${DOMAIN}/fullchain.pem"
+      KEY_FILE: "/etc/nats/swag/letsencrypt/live/${DOMAIN}/privkey.pem"
+      ROUTES: "nats://${DOMAIN}:${CLUSTER_PASSWORD}@nats-1:6222\nnats://${DOMAIN}:${CLUSTER_PASSWORD}@nats-2:6222"
+    command: "-c /etc/nats/nats-server.conf"
+    networks: ["nats"]
+    depends_on: ["nats-1", "swag"]
+
+networks:
+  nats:
+    name: nats
+
+volumes:
+  swag_config:
