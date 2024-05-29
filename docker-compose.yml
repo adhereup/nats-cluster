@@ -1,31 +1,19 @@
 version: "3.5"
 
 services:
-  swag:
-    image: lscr.io/linuxserver/swag:latest
-    container_name: swag
-    cap_add:
-      - NET_ADMIN
-    environment:
-      - PUID=1000
-      - PGID=1000
-      - TZ=Etc/UTC
-      - URL=nats.adhereup.com
-      - VALIDATION=http
-      - SUBDOMAINS=www, #optional
-      - CERTPROVIDER= #optional
-      - DNSPLUGIN=cloudflare #optional
-      - PROPAGATION= #optional
-      - EMAIL=${EMAIL}
-      - ONLY_SUBDOMAINS=false #optional
-      - EXTRA_DOMAINS= #optional
-      - STAGING=false #optional
-    volumes:
-      - swag_config:/config/etc
-    ports:
-      - 443:443
-      - 80:80 #optional
+  nginx:
+    image: jonasal/nginx-certbot:5.2.0-nginx1.26.0
     restart: unless-stopped
+    environment:
+      CERTBOT_EMAIL: ${CERTBOT_EMAIL}
+    env_file:
+      - ./nginx-certbot.env
+    ports:
+      - 80:80
+      - 443:443
+    volumes:
+      - nginx_secrets:/etc/letsencrypt
+      - ./user_conf.d:/etc/nginx/user_conf.d
 
   nats-1:
     image: nats:2.10.16-alpine
@@ -39,25 +27,20 @@ services:
       - "./nats.conf:/etc/nats/nats-server.conf"
       - "./jetstream/nats-1:/nats/storage"
       - "./jwt/nats-1:/nats/jwt"
-      - "swag_config:/etc/nats/swag"
+      - "nginx_secrets:/etc/nats/keys"
     environment:
       TZ: "Europe/Zurich"
       SERVER_NAME: "adhereup-broker-eu1"
-      CLIENT_ADVERTISE: "${DOMAIN}:4222"
-      GATEWAY_ADVERTISE: "${DOMAIN}:7222"
-      LEAFNODES_ADVERTISE: "${DOMAIN}:7422"
-      CLUSTER_USERNAME: "adhereup-cluster"
+      CLUSTER_USERNAME: ${CLUSTER_USERNAME}
       CLUSTER_PASSWORD: ${CLUSTER_PASSWORD}
       NATS_SYSTEM_ACCOUNT: ${NATS_SYSTEM_ACCOUNT}
       NATS_OPERATOR: ${NATS_OPERATOR}
-      NATS_PRELOAD_KEY: ${NATS_PRELOAD_KEY}
-      NATS_PRELOAD_JWT: ${NATS_PRELOAD_JWT}
-      CERT_FILE: "/etc/nats/swag/letsencrypt/live/${DOMAIN}/fullchain.pem"
-      KEY_FILE: "/etc/nats/swag/letsencrypt/live/${DOMAIN}/privkey.pem"
-      ROUTES: "nats://${DOMAIN}:${CLUSTER_PASSWORD}@nats-2:6222\nnats://${DOMAIN}:${CLUSTER_PASSWORD}@nats-3:6222"
+      CERT_FILE: "/etc/nats/keys/live/nats.adhereup.com/fullchain.pem"
+      KEY_FILE: "/etc/nats/keys/live/nats.adhereup.com/privkey.pem"
+      ROUTES: "nats://${CLUSTER_USERNAME}:${CLUSTER_PASSWORD}@nats-2:6222\nnats://${CLUSTER_USERNAME}:${CLUSTER_PASSWORD}@nats-3:6222"
     command: "-c /etc/nats/nats-server.conf --http_port 8222"
     networks: ["nats"]
-    depends_on: ["swag"]
+    depends_on: ["nginx"]
 
   nats-2:
     image: nats:2.10.16-alpine
@@ -68,28 +51,22 @@ services:
       - "1883:1883"
     volumes:
       - "./nats.conf:/etc/nats/nats-server.conf"
-      - "swag_config:/etc/nats/swag"
+      - "nginx_secrets:/etc/nats/keys"
       - "./jetstream/nats-2:/nats/storage"
       - "./jwt/nats-2:/nats/jwt"
     environment:
       TZ: "Europe/Zurich"
       SERVER_NAME: "adhereup-broker-eu2"
-      CLIENT_ADVERTISE: "${DOMAIN}:4223"
-      GATEWAY_ADVERTISE: "${DOMAIN}:7223"
-      LEAFNODES_ADVERTISE: "${DOMAIN}:7423"
-      CLUSTER_USERNAME: "adhereup-cluster"
+      CLUSTER_USERNAME: ${CLUSTER_USERNAME}
       CLUSTER_PASSWORD: ${CLUSTER_PASSWORD}
-      ADMIN_USER_PASS: ${ADMIN_USER_PASS}
       NATS_SYSTEM_ACCOUNT: ${NATS_SYSTEM_ACCOUNT}
       NATS_OPERATOR: ${NATS_OPERATOR}
-      NATS_PRELOAD_KEY: ${NATS_PRELOAD_KEY}
-      NATS_PRELOAD_JWT: ${NATS_PRELOAD_JWT}
-      CERT_FILE: "/etc/nats/swag/letsencrypt/live/${DOMAIN}/fullchain.pem"
-      KEY_FILE: "/etc/nats/swag/letsencrypt/live/${DOMAIN}/privkey.pem"
-      ROUTES: "nats://${DOMAIN}:${CLUSTER_PASSWORD}@nats-1:6222\nnats://${DOMAIN}:${CLUSTER_PASSWORD}@nats-3:6222"
+      CERT_FILE: "/etc/nats/keys/live/nats.adhereup.com/fullchain.pem"
+      KEY_FILE: "/etc/nats/keys/live/nats.adhereup.com/privkey.pem"
+      ROUTES: "nats://${CLUSTER_USERNAME}:${CLUSTER_PASSWORD}@nats-1:6222\nnats://${CLUSTER_USERNAME}:${CLUSTER_PASSWORD}@nats-3:6222"
     command: "-c /etc/nats/nats-server.conf"
     networks: ["nats"]
-    depends_on: ["nats-1", "swag"]
+    depends_on: ["nats-1", "nginx"]
 
   nats-3:
     image: nats:2.10.16-alpine
@@ -100,32 +77,26 @@ services:
       - "1884:1883"
     volumes:
       - "./nats.conf:/etc/nats/nats-server.conf"
-      - "swag_config:/etc/nats/swag"
+      - "nginx_secrets:/etc/nats/keys"
       - "./jetstream/nats-3:/nats/storage"
       - "./jwt/nats-3:/nats/jwt"
     environment:
       TZ: "Europe/Zurich"
       SERVER_NAME: "adhereup-broker-eu3"
-      CLIENT_ADVERTISE: "${DOMAIN}:4224"
-      GATEWAY_ADVERTISE: "${DOMAIN}:7224"
-      LEAFNODES_ADVERTISE: "${DOMAIN}:7424"
-      CLUSTER_USERNAME: "adhereup-cluster"
+      CLUSTER_USERNAME: ${CLUSTER_USERNAME}
       CLUSTER_PASSWORD: ${CLUSTER_PASSWORD}
-      ADMIN_USER_PASS: ${ADMIN_USER_PASS}
       NATS_SYSTEM_ACCOUNT: ${NATS_SYSTEM_ACCOUNT}
       NATS_OPERATOR: ${NATS_OPERATOR}
-      NATS_PRELOAD_KEY: ${NATS_PRELOAD_KEY}
-      NATS_PRELOAD_JWT: ${NATS_PRELOAD_JWT}
-      CERT_FILE: "/etc/nats/swag/letsencrypt/live/${DOMAIN}/fullchain.pem"
-      KEY_FILE: "/etc/nats/swag/letsencrypt/live/${DOMAIN}/privkey.pem"
-      ROUTES: "nats://${DOMAIN}:${CLUSTER_PASSWORD}@nats-1:6222\nnats://${DOMAIN}:${CLUSTER_PASSWORD}@nats-2:6222"
+      CERT_FILE: "/etc/nats/keys/live/nats.adhereup.com/fullchain.pem"
+      KEY_FILE: "/etc/nats/keys/live/nats.adhereup.com/privkey.pem"
+      ROUTES: "nats://${CLUSTER_USERNAME}:${CLUSTER_PASSWORD}@nats-1:6222\nnats://${CLUSTER_USERNAME}:${CLUSTER_PASSWORD}@nats-2:6222"
     command: "-c /etc/nats/nats-server.conf"
     networks: ["nats"]
-    depends_on: ["nats-1", "swag"]
+    depends_on: ["nats-1", "nginx"]
 
 networks:
   nats:
     name: nats
 
 volumes:
-  swag_config:
+  nginx_secrets:
